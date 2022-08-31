@@ -34,17 +34,19 @@ def bert_base(dataset_train, dataset_test):
 
     return model, bertinit
 
+
 def kobert(dataset_train, dataset_test):
     kobertinit = ModelInit('skt/kobert-base-v1')
 
-    tok = kobertinit.tokenizer.tokenize
-    vocab = kobertinit.vocab
+    tok = kobertinit.tokenizer
     train_batch_size = kobertinit.train_batch_size
     test_batch_size = kobertinit.test_batch_size
 
-    data_train = BERTDataset(dataset_train, 0, 1, tok, vocab, 64, True, False)
-    data_test = BERTDataset(dataset_test, 0, 1, tok, vocab, 64, True, False)
+    data_train = BERTDataset(dataset_train, 'document', 'label', tok)
+    data_test = BERTDataset(dataset_test, 'document', 'label', tok)
 
+    print(data_train.__len__())
+    
     train_dataloader = DataLoader(
                         data_train, 
                         batch_size=train_batch_size, 
@@ -52,6 +54,9 @@ def kobert(dataset_train, dataset_test):
                         shuffle=True,
                         pin_memory=True
                         )
+    
+    print((iter(train_dataloader)))
+    
     test_dataloader = DataLoader(
                         data_test, 
                         batch_size=test_batch_size, 
@@ -62,16 +67,19 @@ def kobert(dataset_train, dataset_test):
     
     kobertinit.train_dataloader = train_dataloader
     kobertinit.test_dataloader = test_dataloader
-    
+        
     model = BERTClassifier(kobertinit.model,  dr_rate=0.5).to(device)
     kobertinit.define_hyperparameters(model, train_dataloader, epochs=5)
 
     return model, kobertinit
 
+
 def train_eval(model, modelinit):
     epochs = modelinit.epochs
     train_dataloader = modelinit.train_dataloader
     test_dataloader = modelinit.test_dataloader
+    # dataloader가 iterable 하지 않음 왜?
+    
     for e in range(epochs):
         print("")
         print('======== Epoch {:} / {:} ========'.format(e + 1, epochs))
@@ -84,21 +92,28 @@ def train_eval(model, modelinit):
         test_acc = 0.0
 
         model.train()
-
-        for batch_id, (token_ids, valid_length, segment_ids, label) in enumerate(train_dataloader):
+        
+        for batch_id, batch in enumerate(iter(train_dataloader)):
             # progress bar
+            
+            token_ids = batch['input_ids'].long().to(device)
+            token_type_ids = batch['token_type_ids'].long().to(device)
+            attention_mask = batch['attention_mask'].long().to(device)
+            label = batch['label'].long().to(device)
+            
+            print(f"Batch {batch_id}")
+            print(f"token_ids: {token_ids}")
+            print(f"token_type_ids: {token_type_ids}")
+            print(f"attention_mask: {attention_mask}")
+            print(f"label: {label}")
+            
             if batch_id % 500 == 0 and not batch_id == 0:
                 elapsed = format_time(time.time() - t0)
                 print('  Batch {:>5,}  of  {:>5,}.    Elapsed: {:}.'.format(batch_id, len(train_dataloader), elapsed))
 
             modelinit.optimizer.zero_grad()
-
-            token_ids = token_ids.long().to(device)
-            segment_ids = segment_ids.long().to(device)
-            valid_length= valid_length
-            label = label.long().to(device)
             
-            out = model(token_ids, valid_length, segment_ids)
+            out = model(token_ids, token_type_ids, attention_mask,)
 
             loss = modelinit.loss_fn(out, label)
             loss.backward()
@@ -132,12 +147,12 @@ def train_eval(model, modelinit):
 
         for batch_id, (token_ids, valid_length, segment_ids, label) in enumerate(test_dataloader):
 
-            token_ids = token_ids.long().to(device)
-            segment_ids = segment_ids.long().to(device)
-            valid_length= valid_length
-            label = label.long().to(device)
+            token_ids = batch['input_ids'].long().to(device)
+            token_type_ids = batch['token_type_ids'].long().to(device)
+            attention_mask = batch['attention_mask'].long().to(device)
+            label = batch['label'].long().to(device)
 
-            out = model(token_ids, valid_length, segment_ids)
+            out = model(token_ids, attention_mask, token_type_ids)
             test_acc += calc_accuracy(out, label)
 
         print("  epoch {} / test acc: {}".format(e+1, test_acc / (batch_id+1)))
@@ -171,8 +186,8 @@ def format_time(elapsed):
 
     
 def main():
-    dataset_train = nlp.data.TSVDataset("ratings_train.txt", field_indices=[1,2], num_discard_samples=1)
-    dataset_test = nlp.data.TSVDataset("ratings_test.txt", field_indices=[1,2], num_discard_samples=1)
+    dataset_train = pd.read_csv("ratings_train.txt", sep="\t").drop(columns=["id"]).dropna(how="any")
+    dataset_test = pd.read_csv("ratings_test.txt", sep="\t").drop(columns=["id"]).dropna(how="any")
     
     # ---------------------------------------------------------------------- #
     #                      bert base multilingual cased                      #
@@ -191,8 +206,8 @@ def main():
     kobert_model, kobertinit = kobert(dataset_train, dataset_test)
     model = train_eval(kobert_model, kobertinit)
     
-    torch.save(model.state_dict(), './model/kobert_classifier.pt')
-    torch.save(model, './model/kobert_model.bin')   
+    # torch.save(model.state_dict(), './model/kobert_classifier.pt')
+    # torch.save(model, './model/kobert_model.bin')   
 
 if __name__ == "__main__":
     # set logger

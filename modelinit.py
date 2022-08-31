@@ -99,19 +99,24 @@ class ModelInit():
         self.epochs = epochs
 
 class BERTDataset(Dataset):
-    def __init__(self, dataset, sent_idx, label_idx, bert_tokenizer, vocab, max_len,
-                 pad, pair):
-        transform = nlp.data.BERTSentenceTransform(
-            bert_tokenizer, max_seq_length=max_len, vocab=vocab, pad=pad, pair=pair)
+    def __init__(self, dataset, feat_col, label_col, bert_tokenizer):
+        self.sentences = bert_tokenizer(
+                    list(dataset[feat_col]), 
+                    return_tensors="pt", 
+                    padding=True, 
+                    truncation=True, 
+                    max_length=512, 
+                    add_special_tokens=True
+                )
+        self.label = dataset[label_col].values
 
-        self.sentences = [transform([i[sent_idx]]) for i in dataset]
-        self.labels = [np.int32(i[label_idx]) for i in dataset]
-
-    def __getitem__(self, i):
-        return (self.sentences[i] + (self.labels[i], ))
+    def __getitem__(self, idx):
+        item = {key: torch.tensor(value[idx]) for key, value in self.sentences.items()}
+        item["label"] = torch.tensor(self.label[idx])
+        return item
 
     def __len__(self):
-        return (len(self.labels))
+        return len(self.label)
     
     
 class BERTClassifier(nn.Module):
@@ -135,10 +140,8 @@ class BERTClassifier(nn.Module):
             attention_mask[i][:v] = 1
         return attention_mask.float()
 
-    def forward(self, token_ids, valid_length, segment_ids):
-        attention_mask = self.gen_attention_mask(token_ids, valid_length)
-        
-        _, pooler = self.bert(input_ids = token_ids, token_type_ids = segment_ids.long(), attention_mask = attention_mask.float().to(token_ids.device))
+    def forward(self, token_ids, token_type_ids, attention_mask):
+        _, pooler = self.bert(input_ids = token_ids, token_type_ids = token_type_ids.long(), attention_mask = attention_mask.float().to(token_ids.device))
         if self.dr_rate:
             out = self.dropout(pooler)
         return self.classifier(out)
