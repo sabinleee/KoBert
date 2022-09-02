@@ -1,42 +1,8 @@
 from modelinit import *
 
-def bert_base(dataset_train, dataset_test):
-    bertinit = ModelInit('bert-base-multilingual-cased')
-    
-    tok = bertinit.tokenizer.tokenize
-    vocab = bertinit.vocab
-    train_batch_size = bertinit.train_batch_size
-    test_batch_size = bertinit.test_batch_size
 
-    data_train = BERTDataset(dataset_train, 0, 1, tok, vocab, 64, True, False)
-    data_test = BERTDataset(dataset_test, 0, 1, tok, vocab, 64, True, False)
-
-    train_dataloader = DataLoader(
-                        data_train, 
-                        batch_size=train_batch_size, 
-                        num_workers=4,
-                        shuffle=True,
-                        pin_memory=True
-                        )
-    test_dataloader = DataLoader(
-                        data_test, 
-                        batch_size=test_batch_size, 
-                        num_workers=4,
-                        shuffle=True,
-                        pin_memory=True
-                        )
-    
-    bertinit.train_dataloader = train_dataloader
-    bertinit.test_dataloader = test_dataloader
-    
-    model = BERTClassifier(bertinit.model,  dr_rate=0.5).to(device)
-    bertinit.define_hyperparameters(model, train_dataloader, epochs=5)
-
-    return model, bertinit
-
-
-def kobert(dataset_train, dataset_test):
-    kobertinit = ModelInit('skt/kobert-base-v1')
+def bert(dataset_train, dataset_test, pretrained_model):
+    kobertinit = ModelInit(pretrained_model)
 
     tok = kobertinit.tokenizer
     train_batch_size = kobertinit.train_batch_size
@@ -44,8 +10,6 @@ def kobert(dataset_train, dataset_test):
 
     data_train = BERTDataset(dataset_train, 'document', 'label', tok)
     data_test = BERTDataset(dataset_test, 'document', 'label', tok)
-
-    print(data_train.__len__())
     
     train_dataloader = DataLoader(
                         data_train, 
@@ -54,9 +18,7 @@ def kobert(dataset_train, dataset_test):
                         shuffle=True,
                         pin_memory=True
                         )
-    
-    print((iter(train_dataloader)))
-    
+        
     test_dataloader = DataLoader(
                         data_test, 
                         batch_size=test_batch_size, 
@@ -95,26 +57,19 @@ def train_eval(model, modelinit):
         
         for batch_id, batch in enumerate(iter(train_dataloader)):
             # progress bar
-            
             token_ids = batch['input_ids'].long().to(device)
             token_type_ids = batch['token_type_ids'].long().to(device)
             attention_mask = batch['attention_mask'].long().to(device)
             label = batch['label'].long().to(device)
-            
-            print(f"Batch {batch_id}")
-            print(f"token_ids: {token_ids}")
-            print(f"token_type_ids: {token_type_ids}")
-            print(f"attention_mask: {attention_mask}")
-            print(f"label: {label}")
-            
+                        
             if batch_id % 500 == 0 and not batch_id == 0:
                 elapsed = format_time(time.time() - t0)
                 print('  Batch {:>5,}  of  {:>5,}.    Elapsed: {:}.'.format(batch_id, len(train_dataloader), elapsed))
 
             modelinit.optimizer.zero_grad()
             
-            out = model(token_ids, token_type_ids, attention_mask,)
-
+            out = model(token_ids, token_type_ids, attention_mask, modelinit.args.bert_model)
+            
             loss = modelinit.loss_fn(out, label)
             loss.backward()
 
@@ -192,22 +147,20 @@ def main():
     # ---------------------------------------------------------------------- #
     #                      bert base multilingual cased                      #
     # ---------------------------------------------------------------------- #
-    
-    # bert_model, bertinit = bert_base(dataset_train, dataset_test)
-    # train_eval(bert_model, bertinit)
-    # torch.save(model.state_dict(), './model/bert_base_classifier.pt')
-    # torch.save(model, './model/bert_base_model.bin')   
+    bert_model, bertinit = bert(dataset_train, dataset_test, 'bert-base-multilingual-cased')
+    model = train_eval(bert_model, bertinit)
+    torch.save(model.state_dict(), './model/bert_base_classifier.pt')
+    torch.save(model, './model/bert_base_model.bin')   
     
     
     # ---------------------------------------------------------------------- #
     #                                kobert                                  #
     # ---------------------------------------------------------------------- #
-
-    kobert_model, kobertinit = kobert(dataset_train, dataset_test)
+    kobert_model, kobertinit = bert(dataset_train, dataset_test, 'skt/kobert-base-v1')
     model = train_eval(kobert_model, kobertinit)
     
-    # torch.save(model.state_dict(), './model/kobert_classifier.pt')
-    # torch.save(model, './model/kobert_model.bin')   
+    torch.save(model.state_dict(), './model/kobert_classifier.pt')
+    torch.save(model, './model/kobert_model.bin')   
 
 if __name__ == "__main__":
     # set logger

@@ -55,7 +55,7 @@ class ModelInit():
         self.model = None
         if model_name == "bert-base-multilingual-cased":
             self.tokenizer = BertTokenizer.from_pretrained(self.args.bert_model)
-            self.model = BertForSequenceClassification.from_pretrained(self.args.bert_model, num_labels=self.args.n_class, return_dict=False)
+            self.model = BertModel.from_pretrained(self.args.bert_model, num_labels=self.args.n_class, return_dict=False)
 
         elif model_name == "skt/kobert-base-v1":
             self.tokenizer = KoBERTTokenizer.from_pretrained(self.args.bert_model)
@@ -140,8 +140,17 @@ class BERTClassifier(nn.Module):
             attention_mask[i][:v] = 1
         return attention_mask.float()
 
-    def forward(self, token_ids, token_type_ids, attention_mask):
-        _, pooler = self.bert(input_ids = token_ids, token_type_ids = token_type_ids.long(), attention_mask = attention_mask.float().to(token_ids.device))
-        if self.dr_rate:
-            out = self.dropout(pooler)
-        return self.classifier(out)
+    def forward(self, input_ids, token_type_ids, attention_mask, bert_model):
+        if bert_model == "bert-base-multilingual-cased":
+            pooler = self.bert(input_ids = input_ids, token_type_ids = token_type_ids.long(), attention_mask = attention_mask.float().to(input_ids.device))
+            if self.dr_rate: 
+                out = self.dropout(pooler[0])
+                logits = self.classifier(out[:, 0])
+                
+        if bert_model == "skt/kobert-base-v1":
+            _, pooler = self.bert(input_ids = input_ids, token_type_ids = token_type_ids.long(), attention_mask = attention_mask.float().to(input_ids.device))
+            if self.dr_rate: 
+                out = self.dropout(pooler)
+                logits = self.classifier(out)
+                
+        return logits
