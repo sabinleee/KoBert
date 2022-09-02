@@ -111,7 +111,7 @@ class BERTDataset(Dataset):
         self.label = dataset[label_col].values
 
     def __getitem__(self, idx):
-        item = {key: torch.tensor(value[idx]) for key, value in self.sentences.items()}
+        item = {key: value[idx].clone().detach() for key, value in self.sentences.items()}
         item["label"] = torch.tensor(self.label[idx])
         return item
 
