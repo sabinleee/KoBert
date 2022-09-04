@@ -72,6 +72,8 @@ class ModelInit():
         self.warmup_step = None
         self.scheduler = None
         self.train_loss_per_epoch = []
+        self.validation_loss_per_epoch = []
+        self.train_accuracy_per_epoch = []
         self.validation_accuracy_per_epoch = []
         self.accuracy = None
         self.train_dataloader = None
