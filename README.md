@@ -4,10 +4,6 @@ KoBert from SKTbrain and Bert multi lingual comparison
 
 <hr>
 
-* Codelion AI School 6th deep learning project
-
-<hr>
-
 You can find the main task and notebook in the notebook/main.ipynb
 
 # Korean emotion analysis with BERT based model
